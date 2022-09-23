@@ -1,0 +1,9 @@
+[package]
+name = "fewkz/fluf"
+description = "Lightweight service framework for Roblox games"
+version = "0.1.0"
+license = "MIT"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+exclude = ["*"]
+include = ["fluf.lua", "sha1.lua", "default.project.json", "LICENSE", "README.md", "wally.toml"]

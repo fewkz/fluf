@@ -1,0 +1,9 @@
+{
+    "name": "fluf",
+    "tree": {
+        "$path": "fluf.lua",
+        "sha1": {
+            "$path": "sha1.lua"
+        }
+    }
+}

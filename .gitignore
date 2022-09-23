@@ -1,0 +1,9 @@
+# fluf builds
+fluf.rbxm
+
+# luau-lsp
+sourcemap.json
+
+# Wally
+wally.lock
+**/Packages/**
