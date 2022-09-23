@@ -29,6 +29,14 @@ local hookWorkerQueue = {}
 local hookWorker = Instance.new("BindableFunction")
 local wasHookWorkerRegistered = false
 
+local function enqueue(workerTask: (...any) -> ())
+	if wasHookWorkerRegistered then
+		hookWorker:Invoke(workerTask)
+	else
+		table.insert(hookWorkerQueue, workerTask)
+	end
+end
+
 local fluf = {}
 fluf.verbose = false
 
@@ -72,11 +80,7 @@ function fluf.onDisabled(serviceScript: ServiceScript, f: () -> ())
 			until serviceScript.Enabled == false
 			f()
 		end
-		if wasHookWorkerRegistered then
-			hookWorker:Invoke(hookWorkerTask)
-		else
-			table.insert(hookWorkerQueue, hookWorkerTask)
-		end
+		enqueue(hookWorkerTask)
 	end)
 end
 
@@ -140,32 +144,52 @@ end
 export type State<T> = {
 	get: () -> (T?),
 	changed: ((T) -> ()) -> RBXScriptConnection,
-	set: (T) -> (),
+	set: (T) -> T,
 }
 
--- Creates a new state object which synchronizes state across VMs.
+-- Creates a new state object which synchronizes state across definitions.
 function fluf.state(): State<any>
 	local id = sha1(debug.traceback())
 	local logId = getCallingScriptName() .. "-" .. id:sub(1, 8)
 	flufVerboseLog("Defined state " .. logId)
 
 	local current = nil
-	local anyReceived = false
+	local setStateLast = false
+
+	-- These are used for syncing state when the same state is defined.
+	-- This may be triggered by restarting a script or a seperate Luau VM.
+	local newDefinitionId = sha1("NewDefinition" .. debug.traceback())
+	local newDefinitionEvent, new = uniqueEvent(newDefinitionId)
 
 	local changedEvent = uniqueEvent(id)
 	changedEvent.Event:Connect(function(new)
-		anyReceived = true
 		if current ~= new then
 			flufVerboseLog("State " .. logId .. " received new value", new)
 			current = new
 		end
+		enqueue(function()
+			if setStateLast then
+				setStateLast = false
+				flufVerboseLog("Registering sync source")
+				local conns = {}
+				conns[1] = newDefinitionEvent.Event:Connect(function()
+					flufVerboseLog("New definition detected, syncing state " .. logId)
+					changedEvent:Fire(new)
+				end)
+				conns[2] = changedEvent.Event:Connect(function(new)
+					flufVerboseLog("Unregistering sync source")
+					for _, conn in conns do
+						conn:Disconnect()
+					end
+				end)
+			end
+		end)
 	end)
 
-	local newVMId = sha1("NewVM" .. debug.traceback())
-	local newVMEvent, new = uniqueEvent(newVMId)
 	if not new then
 		-- Must be fired after changedEvent is connected to.
-		newVMEvent:Fire()
+		flufVerboseLog("Firing new definition event")
+		newDefinitionEvent:Fire()
 	end
 
 	local function get()
@@ -178,25 +202,14 @@ function fluf.state(): State<any>
 	local function changedParallel(f)
 		return changedEvent.Event:ConnectParallel(f)
 	end
-	local last = nil
 	local function set(new)
 		if not isSychronized() then
 			flufError("Cannot set state while desychronized")
 		end
-		if anyReceived and not last then
-			-- TODO: Allow state to be set from different VMs.
-			flufError("Can only set state from a single VM")
-		end
 		flufVerboseLog("State " .. logId .. " set to " .. tostring(new))
 		changedEvent:Fire(new)
-		if last then
-			last:Disconnect()
-		end
-		-- Sync the state when there's a new VM.
-		last = newVMEvent.Event:Connect(function()
-			flufVerboseLog("New VM detected, syncing state " .. logId)
-			changedEvent:Fire(new)
-		end)
+		setStateLast = true
+		return new
 	end
 	return { get = get, changed = changed, changedParallel = changedParallel, set = set }
 end
@@ -218,6 +231,16 @@ function fluf.useState<T>(hooks, event: State<T>, callback: (T?) -> ())
 			conn:Disconnect()
 		end
 	end, { event, callback } :: { any })
+end
+
+function fluf.inlineState<T>(initial: T)
+	local state = fluf.state() :: State<T>
+	local value = state.get()
+	if value == nil then
+		return state.set(initial), state.set
+	else
+		return value, state.set
+	end
 end
 
 return fluf
