@@ -85,7 +85,7 @@ local function sha1_feed_64(H, str, offs, size)
 	H[1], H[2], H[3], H[4], H[5] = h1, h2, h3, h4, h5
 end
 
-local function sha1(message): string
+local function sha1(message: string): string
 	-- Create an instance (private objects for current calculation)
 	local H, length, tail = table.pack(table.unpack(md5_sha1_H)), 0, ""
 
