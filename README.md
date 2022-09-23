@@ -6,7 +6,7 @@ You can download the latest release of fluf as a rbxm file from https://github.c
 
 fluf can be added to your project via [Wally](https://wally.run/) by adding this line under dependencies.
 ```toml
-fluf = "fewkz/fluf@0.1.0"
+fluf = "fewkz/fluf@0.1.1"
 ```
 
 ## How to use
