@@ -147,7 +147,7 @@ export type State<T> = {
 	set: (T) -> T,
 }
 
--- Creates a new state object which synchronizes state across VMs.
+-- Creates a new state object which synchronizes state across definitions.
 function fluf.state(): State<any>
 	local id = sha1(debug.traceback())
 	local logId = getCallingScriptName() .. "-" .. id:sub(1, 8)
@@ -156,8 +156,10 @@ function fluf.state(): State<any>
 	local current = nil
 	local setStateLast = false
 
-	local newVMId = sha1("NewVM" .. debug.traceback())
-	local newVMEvent, new = uniqueEvent(newVMId)
+	-- These are used for syncing state when the same state is defined.
+	-- This may be triggered by restarting a script or a seperate Luau VM.
+	local newDefinitionId = sha1("NewDefinition" .. debug.traceback())
+	local newDefinitionEvent, new = uniqueEvent(newDefinitionId)
 
 	local changedEvent = uniqueEvent(id)
 	changedEvent.Event:Connect(function(new)
@@ -168,14 +170,14 @@ function fluf.state(): State<any>
 		enqueue(function()
 			if setStateLast then
 				setStateLast = false
-				flufVerboseLog("Registering newVM connection")
+				flufVerboseLog("Registering sync source")
 				local conns = {}
-				conns[1] = newVMEvent.Event:Connect(function()
-					flufVerboseLog("New VM detected, syncing state " .. logId)
+				conns[1] = newDefinitionEvent.Event:Connect(function()
+					flufVerboseLog("New definition detected, syncing state " .. logId)
 					changedEvent:Fire(new)
 				end)
 				conns[2] = changedEvent.Event:Connect(function(new)
-					flufVerboseLog("Unregistering newVM connection")
+					flufVerboseLog("Unregistering sync source")
 					for _, conn in conns do
 						conn:Disconnect()
 					end
@@ -186,8 +188,8 @@ function fluf.state(): State<any>
 
 	if not new then
 		-- Must be fired after changedEvent is connected to.
-		flufVerboseLog("Firing new vm event")
-		newVMEvent:Fire()
+		flufVerboseLog("Firing new definition event")
+		newDefinitionEvent:Fire()
 	end
 
 	local function get()
