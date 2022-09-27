@@ -76,6 +76,8 @@ This optimally schedules your services, ensuring they don't block the rest of yo
 - Scripts can't be required, which means you have to structure the communication between services
 in a way that can't cause cyclic dependencies.
 
+Scripts could still have side effects that won't be cleaned up when they're disabled, however. Especially in cases where you mutate the `DataModel`. In this case you would use the `fluf.onDisabled` hook to clean up any of these side effects. For example, removing a UI the script added to `PlayerGui`.
+
 ## Parallelization
 fluf is designed to allow communication between services to work across actors. Events created by fluf will be the same across actors, and state will replicate across actors.
 
